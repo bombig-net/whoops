@@ -49,6 +49,22 @@ class Whoops_API {
             ),
         ));
 
+        register_rest_route('whoops/v1', '/checklists', array(
+            array(
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => array($this, 'get_checklists'),
+                'permission_callback' => array($this, 'check_admin_permissions'),
+            ),
+        ));
+
+        register_rest_route('whoops/v1', '/checklists/(?P<list>[a-z-]+)', array(
+            array(
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => array($this, 'get_checklist'),
+                'permission_callback' => array($this, 'check_admin_permissions'),
+            ),
+        ));
+
         register_rest_route('whoops/v1', '/tasks/(?P<id>\d+)', array(
             array(
                 'methods' => WP_REST_Server::EDITABLE,
@@ -166,5 +182,77 @@ class Whoops_API {
         }
 
         return rest_ensure_response(array('deleted' => true));
+    }
+
+    /**
+     * Get all available checklists
+     */
+    public function get_checklists($request) {
+        $response = wp_remote_get(
+            'https://whoopskjvmldv3-whoops-checklists.functions.fnc.fr-par.scw.cloud/',
+            array(
+                'headers' => array(
+                    'X-Auth-Token' => Whoops_Settings::get_api_token()
+                )
+            )
+        );
+
+        if (is_wp_error($response)) {
+            return new WP_Error(
+                'api_error',
+                'Failed to fetch checklists: ' . $response->get_error_message(),
+                array('status' => 500)
+            );
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return new WP_Error(
+                'api_error',
+                'Invalid response from checklist service',
+                array('status' => 500)
+            );
+        }
+
+        return rest_ensure_response($data);
+    }
+
+    /**
+     * Get a specific checklist
+     */
+    public function get_checklist($request) {
+        $list = $request->get_param('list');
+        
+        $response = wp_remote_get(
+            'https://whoopskjvmldv3-whoops-checklists.functions.fnc.fr-par.scw.cloud/?list=' . urlencode($list),
+            array(
+                'headers' => array(
+                    'X-Auth-Token' => Whoops_Settings::get_api_token()
+                )
+            )
+        );
+
+        if (is_wp_error($response)) {
+            return new WP_Error(
+                'api_error',
+                'Failed to fetch checklist: ' . $response->get_error_message(),
+                array('status' => 500)
+            );
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return new WP_Error(
+                'api_error',
+                'Invalid response from checklist service',
+                array('status' => 500)
+            );
+        }
+
+        return rest_ensure_response($data);
     }
 } 

@@ -92,6 +92,21 @@ class Whoops_Widget {
                 <?php endif; ?>
             </div>
         </div>
+
+        <!-- Predefined Lists Modal -->
+        <div id="whoops-lists-modal" class="whoops-modal">
+            <div class="whoops-modal-content">
+                <div class="whoops-modal-header">
+                    <h3>Load Predefined List</h3>
+                    <button class="close-modal">&times;</button>
+                </div>
+                <div class="whoops-modal-body">
+                    <div class="lists-container">
+                        <!-- Lists will be loaded here dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
         <?php
     }
 
@@ -133,6 +148,15 @@ class Whoops_Widget {
             array(
                 'root' => esc_url_raw(rest_url()),
                 'nonce' => wp_create_nonce('wp_rest')
+            )
+        );
+
+        // Add Whoops specific settings
+        wp_localize_script(
+            'whoops-admin',
+            'whoopsSettings',
+            array(
+                'apiToken' => Whoops_Settings::get_api_token()
             )
         );
     }

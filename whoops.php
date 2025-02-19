@@ -31,10 +31,11 @@ define('WHOOPS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WHOOPS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('WHOOPS_DB_VERSION', '1.0');
 
-// Include the database class
+// Include the required files
 require_once WHOOPS_PLUGIN_DIR . 'includes/class-whoops-db.php';
 require_once WHOOPS_PLUGIN_DIR . 'includes/class-whoops-widget.php';
 require_once WHOOPS_PLUGIN_DIR . 'includes/class-whoops-api.php';
+require_once WHOOPS_PLUGIN_DIR . 'includes/class-whoops-settings.php';
 
 /**
  * The code that runs during plugin activation.
@@ -75,13 +76,17 @@ function run_whoops() {
 
     // Initialize API class
     $whoops_api = new Whoops_API($whoops_db);
+
+    // Initialize settings class
+    $whoops_settings = new Whoops_Settings();
     
     // Store instances globally if needed
     global $whoops_plugin;
     $whoops_plugin = (object) array(
         'db' => $whoops_db,
         'widget' => $whoops_widget,
-        'api' => $whoops_api
+        'api' => $whoops_api,
+        'settings' => $whoops_settings
     );
 }
 

@@ -3,7 +3,9 @@ jQuery(document).ready(function ($) {
         state: {
             tasks: [],
             loading: false,
-            error: null
+            error: null,
+            lists: [],
+            selectedList: null
         },
 
         // Initialize the task manager
@@ -21,6 +23,10 @@ jQuery(document).ready(function ($) {
                 addForm: $('.add-task-form'),
                 newTaskInput: $('#new-task'),
                 clearCompletedBtn: $('.clear-completed-button'),
+                loadListBtn: $('.load-list-button'),
+                modal: $('#whoops-lists-modal'),
+                modalClose: $('.close-modal'),
+                listsContainer: $('.lists-container'),
                 loadingOverlay: $('<div class="whoops-loading-overlay"><div class="spinner"></div></div>')
             };
 
@@ -61,6 +67,30 @@ jQuery(document).ready(function ($) {
                 if (confirm('Are you sure you want to clear all completed tasks?')) {
                     this.clearCompleted();
                 }
+            });
+
+            // Load list modal
+            this.elements.loadListBtn.on('click', (e) => {
+                e.preventDefault();
+                this.openListsModal();
+            });
+
+            // Close modal
+            this.elements.modalClose.on('click', () => {
+                this.closeListsModal();
+            });
+
+            // Close modal on outside click
+            this.elements.modal.on('click', (e) => {
+                if ($(e.target).is(this.elements.modal)) {
+                    this.closeListsModal();
+                }
+            });
+
+            // List selection
+            this.elements.listsContainer.on('click', '.list-item', (e) => {
+                const listName = $(e.currentTarget).data('list-name');
+                this.loadList(listName);
             });
         },
 
@@ -224,6 +254,75 @@ jQuery(document).ready(function ($) {
                 console.error('Clear completed error:', error);
                 this.state.error = 'Failed to clear completed tasks. Please try again.';
                 await this.refreshState();
+            } finally {
+                this.state.loading = false;
+                this.render();
+            }
+        },
+
+        // Lists Modal Methods
+        async openListsModal() {
+            this.state.loading = true;
+            this.render();
+
+            try {
+                const response = await $.ajax({
+                    url: wpApiSettings.root + 'whoops/v1/checklists',
+                    method: 'GET',
+                    beforeSend: (xhr) => {
+                        xhr.setRequestHeader('X-WP-Nonce', wpApiSettings.nonce);
+                    }
+                });
+
+                this.state.lists = response.lists;
+                this.renderLists();
+                this.elements.modal.show();
+            } catch (error) {
+                console.error('Load lists error:', error);
+                this.state.error = 'Failed to load predefined lists. Please try again.';
+            } finally {
+                this.state.loading = false;
+                this.render();
+            }
+        },
+
+        closeListsModal() {
+            this.elements.modal.hide();
+        },
+
+        renderLists() {
+            const listsHtml = this.state.lists.map(list => `
+                <div class="list-item" data-list-name="${list.name}">
+                    <h4>${list.name}</h4>
+                    <p>${list.description}</p>
+                </div>
+            `).join('');
+
+            this.elements.listsContainer.html(listsHtml);
+        },
+
+        async loadList(listName) {
+            this.state.loading = true;
+            this.render();
+
+            try {
+                const response = await $.ajax({
+                    url: wpApiSettings.root + 'whoops/v1/checklists/' + listName,
+                    method: 'GET',
+                    beforeSend: (xhr) => {
+                        xhr.setRequestHeader('X-WP-Nonce', wpApiSettings.nonce);
+                    }
+                });
+
+                // Create tasks from the list
+                for (const task of response.tasks) {
+                    await this.createTask(task);
+                }
+
+                this.closeListsModal();
+            } catch (error) {
+                console.error('Load list error:', error);
+                this.state.error = 'Failed to load the selected list. Please try again.';
             } finally {
                 this.state.loading = false;
                 this.render();
