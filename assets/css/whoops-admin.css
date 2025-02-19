@@ -156,14 +156,28 @@
     border: none;
     color: #FFD506;
     cursor: pointer;
-    font-size: 24px;
+    font-size: 18px;
     padding: 0 5px;
     opacity: 0;
-    transition: opacity 0.2s;
+    transition: all 0.2s ease;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .task-item:hover .delete-task {
     opacity: 1;
+}
+
+.task-item .delete-task.confirm {
+    color: #FF6B6B;
+    transform: scale(1.1);
+}
+
+.task-item .delete-task.confirm:hover {
+    transform: scale(1.15);
 }
 
 .task-item .task-checkbox:checked+.task-description {

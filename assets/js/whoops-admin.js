@@ -63,22 +63,27 @@ jQuery(document).ready(function ($) {
                 <input type="checkbox" class="task-checkbox" <%= completed == 1 ? 'checked="checked"' : '' %>>
                 <span class="task-description"><%= task_description %></span>
             </label>
-            <button class="delete-task" title="Delete task">×</button>
+            <button class="delete-task" title="Delete task">
+                <span class="dashicons dashicons-trash"></span>
+            </button>
         `),
 
         events: {
             'change .task-checkbox': 'toggleComplete',
-            'click .delete-task': 'deleteTask'
+            'click .delete-task': 'handleDelete',
+            'mouseleave': 'resetDeleteState'
         },
 
         initialize: function () {
             this.listenTo(this.model, 'change', this.render);
             this.listenTo(this.model, 'destroy', this.remove);
+            this.deleteConfirmed = false;
         },
 
         render: function () {
             this.$el.html(this.template(this.model.toJSON()));
             this.$el.toggleClass('completed', this.model.get('completed') == 1);
+            this.deleteConfirmed = false;
             return this;
         },
 
@@ -86,19 +91,42 @@ jQuery(document).ready(function ($) {
             this.model.toggle();
         },
 
-        deleteTask: function (e) {
+        handleDelete: function (e) {
             e.preventDefault();
-            if (confirm('Are you sure you want to delete this task?')) {
-                this.model.destroy({
-                    wait: true,
-                    error: function (model, response) {
-                        if (response.status === 404) {
-                            // Item already deleted, just remove the view
-                            model.trigger('destroy', model);
-                        }
-                    }
-                });
+            const $button = this.$(e.currentTarget);
+
+            if (!this.deleteConfirmed) {
+                // First click - show confirmation state
+                this.deleteConfirmed = true;
+                $button.addClass('confirm');
+                $button.html('<span class="dashicons dashicons-yes"></span>');
+                $button.attr('title', 'Click again to confirm deletion');
+            } else {
+                // Second click - delete the task
+                this.deleteTask();
             }
+        },
+
+        resetDeleteState: function () {
+            if (this.deleteConfirmed) {
+                const $button = this.$('.delete-task');
+                this.deleteConfirmed = false;
+                $button.removeClass('confirm');
+                $button.html('<span class="dashicons dashicons-trash"></span>');
+                $button.attr('title', 'Delete task');
+            }
+        },
+
+        deleteTask: function () {
+            this.model.destroy({
+                wait: true,
+                error: function (model, response) {
+                    if (response.status === 404) {
+                        // Item already deleted, just remove the view
+                        model.trigger('destroy', model);
+                    }
+                }
+            });
         }
     });
 

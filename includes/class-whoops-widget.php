@@ -133,10 +133,12 @@ class Whoops_Widget {
             return;
         }
 
+        wp_enqueue_style('dashicons');
+        
         wp_enqueue_style(
             'whoops-admin',
             WHOOPS_PLUGIN_URL . 'assets/css/whoops-admin.css',
-            array(),
+            array('dashicons'),
             WHOOPS_VERSION
         );
 
