@@ -59,4 +59,141 @@ class Whoops_DB {
             self::create_table();
         }
     }
+
+    /**
+     * Add a new task
+     *
+     * @param string $task_description The description of the task
+     * @return int|false The id of the inserted task or false on failure
+     */
+    public function create_task($task_description) {
+        global $wpdb;
+        
+        $result = $wpdb->insert(
+            $this->table_name,
+            array(
+                'task_description' => sanitize_text_field($task_description),
+                'completed' => 0
+            ),
+            array('%s', '%d')
+        );
+
+        return $result ? $wpdb->insert_id : false;
+    }
+
+    /**
+     * Get all tasks
+     *
+     * @param array $args Optional. Arguments to filter tasks
+     * @return array Array of tasks
+     */
+    public function get_tasks($args = array()) {
+        global $wpdb;
+
+        $defaults = array(
+            'completed' => null,
+            'orderby' => 'created_at',
+            'order' => 'DESC'
+        );
+
+        $args = wp_parse_args($args, $defaults);
+        
+        $sql = "SELECT * FROM {$this->table_name}";
+        
+        if (isset($args['completed'])) {
+            $sql .= $wpdb->prepare(" WHERE completed = %d", $args['completed']);
+        }
+
+        $sql .= " ORDER BY {$args['orderby']} {$args['order']}";
+        
+        return $wpdb->get_results($sql);
+    }
+
+    /**
+     * Get a single task by ID
+     *
+     * @param int $id The task ID
+     * @return object|null Task object or null if not found
+     */
+    public function get_task($id) {
+        global $wpdb;
+        
+        return $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM {$this->table_name} WHERE id = %d",
+                $id
+            )
+        );
+    }
+
+    /**
+     * Update a task
+     *
+     * @param int $id The task ID
+     * @param array $data The data to update
+     * @return bool True on success, false on failure
+     */
+    public function update_task($id, $data) {
+        global $wpdb;
+
+        $allowed_fields = array(
+            'task_description' => '%s',
+            'completed' => '%d'
+        );
+
+        $update_data = array();
+        $update_format = array();
+
+        foreach ($data as $field => $value) {
+            if (array_key_exists($field, $allowed_fields)) {
+                $update_data[$field] = $field === 'task_description' 
+                    ? sanitize_text_field($value) 
+                    : $value;
+                $update_format[] = $allowed_fields[$field];
+            }
+        }
+
+        if (empty($update_data)) {
+            return false;
+        }
+
+        return $wpdb->update(
+            $this->table_name,
+            $update_data,
+            array('id' => $id),
+            $update_format,
+            array('%d')
+        );
+    }
+
+    /**
+     * Delete a task
+     *
+     * @param int $id The task ID
+     * @return bool True on success, false on failure
+     */
+    public function delete_task($id) {
+        global $wpdb;
+        
+        return $wpdb->delete(
+            $this->table_name,
+            array('id' => $id),
+            array('%d')
+        );
+    }
+
+    /**
+     * Delete all completed tasks
+     *
+     * @return int|false The number of rows deleted, or false on error
+     */
+    public function delete_completed_tasks() {
+        global $wpdb;
+        
+        return $wpdb->delete(
+            $this->table_name,
+            array('completed' => 1),
+            array('%d')
+        );
+    }
 } 
