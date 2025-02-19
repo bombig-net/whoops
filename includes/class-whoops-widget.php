@@ -118,7 +118,7 @@ class Whoops_Widget {
     }
 
     /**
-     * Enqueue widget styles
+     * Enqueue widget styles and scripts
      */
     public function enqueue_styles($hook) {
         if ('index.php' !== $hook) {
@@ -132,23 +132,16 @@ class Whoops_Widget {
             WHOOPS_VERSION
         );
 
+        // Enqueue WP API and its dependencies
+        wp_enqueue_script('wp-api');
+
         // Enqueue JavaScript
         wp_enqueue_script(
             'whoops-admin',
             WHOOPS_PLUGIN_URL . 'assets/js/whoops-admin.js',
-            array('jquery'),
+            array('wp-api'),
             WHOOPS_VERSION,
             true
-        );
-
-        // Add the WordPress REST API nonce to a global JavaScript object
-        wp_localize_script(
-            'whoops-admin',
-            'wpApiSettings',
-            array(
-                'root' => esc_url_raw(rest_url()),
-                'nonce' => wp_create_nonce('wp_rest')
-            )
         );
 
         // Add Whoops specific settings

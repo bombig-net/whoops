@@ -15,6 +15,9 @@ class Whoops_API {
      */
     private $db;
 
+    private $namespace = 'wp/v2';
+    private $rest_base = 'whoops-tasks';
+
     /**
      * Initialize the class
      *
@@ -36,40 +39,46 @@ class Whoops_API {
      * Register REST API routes
      */
     public function register_routes() {
-        register_rest_route('whoops/v1', '/tasks', array(
+        register_rest_route($this->namespace, '/' . $this->rest_base, array(
             array(
                 'methods' => WP_REST_Server::READABLE,
                 'callback' => array($this, 'get_tasks'),
                 'permission_callback' => array($this, 'check_admin_permissions'),
+                'schema' => array($this, 'get_item_schema'),
             ),
             array(
                 'methods' => WP_REST_Server::CREATABLE,
                 'callback' => array($this, 'create_task'),
                 'permission_callback' => array($this, 'check_admin_permissions'),
+                'args' => array(
+                    'task_description' => array(
+                        'required' => true,
+                        'type' => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ),
+                ),
             ),
         ));
 
-        register_rest_route('whoops/v1', '/checklists', array(
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)', array(
             array(
                 'methods' => WP_REST_Server::READABLE,
-                'callback' => array($this, 'get_checklists'),
+                'callback' => array($this, 'get_task'),
                 'permission_callback' => array($this, 'check_admin_permissions'),
             ),
-        ));
-
-        register_rest_route('whoops/v1', '/checklists/(?P<list>[a-z-]+)', array(
-            array(
-                'methods' => WP_REST_Server::READABLE,
-                'callback' => array($this, 'get_checklist'),
-                'permission_callback' => array($this, 'check_admin_permissions'),
-            ),
-        ));
-
-        register_rest_route('whoops/v1', '/tasks/(?P<id>\d+)', array(
             array(
                 'methods' => WP_REST_Server::EDITABLE,
                 'callback' => array($this, 'update_task'),
                 'permission_callback' => array($this, 'check_admin_permissions'),
+                'args' => array(
+                    'completed' => array(
+                        'type' => 'boolean',
+                    ),
+                    'task_description' => array(
+                        'type' => 'string',
+                        'sanitize_callback' => 'sanitize_text_field',
+                    ),
+                ),
             ),
             array(
                 'methods' => WP_REST_Server::DELETABLE,
@@ -78,13 +87,41 @@ class Whoops_API {
             ),
         ));
 
-        register_rest_route('whoops/v1', '/tasks/clear-completed', array(
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/clear-completed', array(
             array(
                 'methods' => WP_REST_Server::DELETABLE,
                 'callback' => array($this, 'clear_completed'),
                 'permission_callback' => array($this, 'check_admin_permissions'),
             ),
         ));
+    }
+
+    public function get_item_schema() {
+        return array(
+            '$schema'              => 'http://json-schema.org/draft-04/schema#',
+            'title'                => 'task',
+            'type'                 => 'object',
+            'properties'           => array(
+                'id' => array(
+                    'description'  => 'Unique identifier for the task.',
+                    'type'        => 'integer',
+                    'context'     => array('view', 'edit'),
+                    'readonly'    => true,
+                ),
+                'task_description' => array(
+                    'description'  => 'The description of the task.',
+                    'type'        => 'string',
+                    'context'     => array('view', 'edit'),
+                    'required'    => true,
+                ),
+                'completed' => array(
+                    'description'  => 'Whether the task is completed.',
+                    'type'        => 'boolean',
+                    'context'     => array('view', 'edit'),
+                    'default'     => false,
+                ),
+            ),
+        );
     }
 
     /**
@@ -98,76 +135,81 @@ class Whoops_API {
      * Get tasks
      */
     public function get_tasks($request) {
-        return rest_ensure_response($this->db->get_tasks());
+        $tasks = $this->db->get_tasks();
+        return rest_ensure_response($tasks);
+    }
+
+    /**
+     * Get a specific task
+     */
+    public function get_task($request) {
+        $task = $this->db->get_task($request['id']);
+        if (!$task) {
+            return new WP_Error('task_not_found', 'Task not found', array('status' => 404));
+        }
+        return rest_ensure_response($task);
     }
 
     /**
      * Create a new task
      */
     public function create_task($request) {
-        $task_description = sanitize_text_field($request->get_param('task_description'));
-        
-        if (empty($task_description)) {
-            return new WP_Error('invalid_task', 'Task description is required', array('status' => 400));
-        }
-
-        $task_id = $this->db->create_task($task_description);
-        
+        $task_id = $this->db->create_task($request['task_description']);
         if (!$task_id) {
             return new WP_Error('task_creation_failed', 'Failed to create task', array('status' => 500));
         }
-
-        return rest_ensure_response($this->db->get_task($task_id));
+        $task = $this->db->get_task($task_id);
+        return rest_ensure_response($task);
     }
 
     /**
      * Update a task
      */
     public function update_task($request) {
-        $task_id = (int) $request->get_param('id');
-        $task = $this->db->get_task($task_id);
-
+        $task = $this->db->get_task($request['id']);
         if (!$task) {
             return new WP_Error('task_not_found', 'Task not found', array('status' => 404));
         }
 
         $data = array();
         
-        if ($request->has_param('completed')) {
-            // Convert boolean to integer (0 or 1)
-            $data['completed'] = (int) $request->get_param('completed');
-        }
-        
-        if ($request->has_param('task_description')) {
-            $data['task_description'] = sanitize_text_field($request->get_param('task_description'));
+        // Handle completed state
+        if (isset($request['completed'])) {
+            $completed = $request['completed'];
+            // Convert various truthy/falsy values to 0 or 1
+            if (is_bool($completed)) {
+                $data['completed'] = $completed ? 1 : 0;
+            } else {
+                $data['completed'] = $completed ? 1 : 0;
+            }
         }
 
-        $updated = $this->db->update_task($task_id, $data);
-        
+        // Handle task description
+        if (isset($request['task_description'])) {
+            $data['task_description'] = sanitize_text_field($request['task_description']);
+        }
+
+        if (empty($data)) {
+            return rest_ensure_response($task);
+        }
+
+        $updated = $this->db->update_task($request['id'], $data);
         if (!$updated) {
             return new WP_Error('task_update_failed', 'Failed to update task', array('status' => 500));
         }
 
-        return rest_ensure_response($this->db->get_task($task_id));
+        $updated_task = $this->db->get_task($request['id']);
+        return rest_ensure_response($updated_task);
     }
 
     /**
      * Delete a task
      */
     public function delete_task($request) {
-        $task_id = (int) $request->get_param('id');
-        $task = $this->db->get_task($task_id);
-
-        if (!$task) {
-            return new WP_Error('task_not_found', 'Task not found', array('status' => 404));
-        }
-
-        $deleted = $this->db->delete_task($task_id);
-        
+        $deleted = $this->db->delete_task($request['id']);
         if (!$deleted) {
-            return new WP_Error('task_deletion_failed', 'Failed to delete task', array('status' => 500));
+            return new WP_Error('task_deletion_failed', 'Failed to delete task', array('status' => 404));
         }
-
         return rest_ensure_response(array('deleted' => true));
     }
 
@@ -176,83 +218,9 @@ class Whoops_API {
      */
     public function clear_completed($request) {
         $deleted = $this->db->delete_completed_tasks();
-        
         if ($deleted === false) {
             return new WP_Error('clear_completed_failed', 'Failed to clear completed tasks', array('status' => 500));
         }
-
         return rest_ensure_response(array('deleted' => true));
-    }
-
-    /**
-     * Get all available checklists
-     */
-    public function get_checklists($request) {
-        $response = wp_remote_get(
-            'https://whoopskjvmldv3-whoops-checklists.functions.fnc.fr-par.scw.cloud/',
-            array(
-                'headers' => array(
-                    'X-Auth-Token' => Whoops_Settings::get_api_token()
-                )
-            )
-        );
-
-        if (is_wp_error($response)) {
-            return new WP_Error(
-                'api_error',
-                'Failed to fetch checklists: ' . $response->get_error_message(),
-                array('status' => 500)
-            );
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return new WP_Error(
-                'api_error',
-                'Invalid response from checklist service',
-                array('status' => 500)
-            );
-        }
-
-        return rest_ensure_response($data);
-    }
-
-    /**
-     * Get a specific checklist
-     */
-    public function get_checklist($request) {
-        $list = $request->get_param('list');
-        
-        $response = wp_remote_get(
-            'https://whoopskjvmldv3-whoops-checklists.functions.fnc.fr-par.scw.cloud/?list=' . urlencode($list),
-            array(
-                'headers' => array(
-                    'X-Auth-Token' => Whoops_Settings::get_api_token()
-                )
-            )
-        );
-
-        if (is_wp_error($response)) {
-            return new WP_Error(
-                'api_error',
-                'Failed to fetch checklist: ' . $response->get_error_message(),
-                array('status' => 500)
-            );
-        }
-
-        $body = wp_remote_retrieve_body($response);
-        $data = json_decode($body, true);
-
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            return new WP_Error(
-                'api_error',
-                'Invalid response from checklist service',
-                array('status' => 500)
-            );
-        }
-
-        return rest_ensure_response($data);
     }
 } 
