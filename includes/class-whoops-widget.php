@@ -43,6 +43,12 @@ class Whoops_Widget {
             array($this, 'render_widget'),
             array($this, 'configure_widget')
         );
+
+        // Add our custom class to the widget container
+        add_filter('postbox_classes_dashboard_whoops_dashboard_widget', function($classes) {
+            $classes[] = 'whoops-container';
+            return $classes;
+        });
     }
 
     /**
@@ -117,13 +123,6 @@ class Whoops_Widget {
             </div>
         </div>
         <?php
-    }
-
-    /**
-     * Configure widget settings (callback for widget options)
-     */
-    public function configure_widget() {
-        // We'll add widget configuration options here later if needed
     }
 
     /**
