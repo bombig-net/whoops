@@ -196,4 +196,30 @@ class Whoops_DB {
             array('%d')
         );
     }
+
+    /**
+     * Delete all tasks
+     *
+     * @return bool True on success, false on failure
+     */
+    public function delete_all_tasks() {
+        global $wpdb;
+        
+        $result = $wpdb->query("TRUNCATE TABLE {$this->table_name}");
+        
+        if ($result === false) {
+            error_log('Whoops DB Error: Failed to delete all tasks - ' . $wpdb->last_error);
+        }
+        
+        return $result !== false;
+    }
+
+    /**
+     * Get the table name
+     *
+     * @return string
+     */
+    private function get_table_name() {
+        return $this->table_name;
+    }
 } 

@@ -14,7 +14,7 @@ jQuery(document).ready(function ($) {
             task_description: '',
             completed: 0
         },
-        urlRoot: wpApiSettings.root + 'wp/v2/whoops-tasks',
+        urlRoot: wpApiSettings.root + 'whoops/v1/tasks',
 
         initialize: function () {
             // No need for the change:completed handler as toggle() handles it
@@ -34,7 +34,7 @@ jQuery(document).ready(function ($) {
     // Task Collection
     const TaskCollection = Backbone.Collection.extend({
         model: Task,
-        url: wpApiSettings.root + 'wp/v2/whoops-tasks',
+        url: wpApiSettings.root + 'whoops/v1/tasks',
 
         initialize: function () {
             // Remove the add/remove handlers as they're causing double saves
@@ -109,7 +109,10 @@ jQuery(document).ready(function ($) {
         events: {
             'submit .add-task-form': 'createTask',
             'click .clear-completed-button': 'clearCompleted',
-            'click .load-list-button': 'openListsModal'
+            'click .clear-all-button': 'clearAll',
+            'click .load-list-button': 'openListsModal',
+            'click .close-modal': 'closeModal',
+            'click #whoops-lists-modal': 'handleModalClick'
         },
 
         initialize: function () {
@@ -177,8 +180,36 @@ jQuery(document).ready(function ($) {
             }
         },
 
+        clearAll: function () {
+            if (confirm('Are you sure you want to clear all tasks? This cannot be undone.')) {
+                this.showLoading();
+
+                $.ajax({
+                    url: wpApiSettings.root + 'whoops/v1/tasks/clear-all',
+                    method: 'DELETE',
+                    beforeSend: (xhr) => {
+                        xhr.setRequestHeader('X-WP-Nonce', wpApiSettings.nonce);
+                    }
+                })
+                    .done(() => {
+                        // Clear the collection after successful database clear
+                        this.tasks.reset();
+                    })
+                    .fail((jqXHR) => {
+                        console.error('Failed to clear tasks:', jqXHR.responseText || 'Unknown error');
+                        // If we can't clear tasks, try to fetch them again to sync the UI
+                        this.tasks.fetch({ reset: true });
+                        alert('Failed to clear tasks. Please try again.');
+                    })
+                    .always(() => {
+                        this.hideLoading();
+                    });
+            }
+        },
+
         openListsModal: function () {
             this.showLoading();
+            this.$modal.show();
 
             $.ajax({
                 url: wpApiSettings.root + 'whoops/v1/checklists',
@@ -189,14 +220,29 @@ jQuery(document).ready(function ($) {
             })
                 .done((response) => {
                     this.renderLists(response.lists);
-                    this.$modal.show();
+                    this.bindListClickHandlers();
                 })
-                .fail(() => {
-                    alert('Failed to load predefined lists. Please try again.');
+                .fail((jqXHR) => {
+                    this.$modal.hide();
+                    if (jqXHR.status === 401) {
+                        alert('Please configure your API token in Whoops settings.');
+                    } else {
+                        alert('Failed to load predefined lists. Please try again.');
+                    }
                 })
                 .always(() => {
                     this.hideLoading();
                 });
+        },
+
+        closeModal: function () {
+            this.$modal.hide();
+        },
+
+        handleModalClick: function (e) {
+            if ($(e.target).is(this.$modal)) {
+                this.closeModal();
+            }
         },
 
         renderLists: function (lists) {
@@ -210,12 +256,102 @@ jQuery(document).ready(function ($) {
             this.$listsContainer.html(listsHtml);
         },
 
+        bindListClickHandlers: function () {
+            this.$listsContainer.find('.list-item').on('click', (e) => {
+                const listName = $(e.currentTarget).data('list-name');
+                this.loadSpecificList(listName);
+            });
+        },
+
+        loadSpecificList: function (listName) {
+            this.showLoading();
+
+            // First fetch the list details
+            $.ajax({
+                url: wpApiSettings.root + 'whoops/v1/checklists/' + listName,
+                method: 'GET',
+                beforeSend: (xhr) => {
+                    xhr.setRequestHeader('X-WP-Nonce', wpApiSettings.nonce);
+                }
+            })
+                .done((response) => {
+                    // Store tasks for later use
+                    const tasks = response.tasks;
+
+                    // Clear existing tasks using the collection's method
+                    this.tasks.reset();
+
+                    // Function to create tasks sequentially
+                    const createTasks = () => {
+                        let currentIndex = 0;
+
+                        const createNextTask = () => {
+                            if (currentIndex >= tasks.length) {
+                                this.closeModal();
+                                this.hideLoading();
+                                return;
+                            }
+
+                            const taskDescription = tasks[currentIndex];
+
+                            // Create task through the collection
+                            this.tasks.create(
+                                { task_description: taskDescription, completed: 0 },
+                                {
+                                    wait: true,
+                                    success: () => {
+                                        currentIndex++;
+                                        createNextTask();
+                                    },
+                                    error: (model, xhr) => {
+                                        console.error('Failed to create task:', taskDescription, xhr);
+                                        currentIndex++;
+                                        createNextTask();
+                                    }
+                                }
+                            );
+                        };
+
+                        createNextTask();
+                    };
+
+                    // Delete all existing tasks first
+                    $.ajax({
+                        url: wpApiSettings.root + 'whoops/v1/tasks/clear-all',
+                        method: 'DELETE',
+                        beforeSend: (xhr) => {
+                            xhr.setRequestHeader('X-WP-Nonce', wpApiSettings.nonce);
+                        }
+                    })
+                        .done(() => {
+                            // Start creating new tasks
+                            createTasks();
+                        })
+                        .fail((jqXHR) => {
+                            console.error('Failed to clear tasks:', jqXHR.responseText || 'Unknown error');
+                            // If we can't clear tasks, try to fetch them again to sync the UI
+                            this.tasks.fetch({ reset: true });
+                            alert('Failed to update tasks. Please try again.');
+                            this.closeModal();
+                            this.hideLoading();
+                        });
+                })
+                .fail((jqXHR) => {
+                    if (jqXHR.status === 401) {
+                        alert('Please configure your API token in Whoops settings.');
+                    } else {
+                        alert('Failed to load the selected list. Please try again.');
+                    }
+                    this.hideLoading();
+                });
+        },
+
         showLoading: function () {
-            this.$loadingOverlay.fadeIn(200);
+            this.$loadingOverlay.css('display', 'flex');
         },
 
         hideLoading: function () {
-            this.$loadingOverlay.fadeOut(200);
+            this.$loadingOverlay.css('display', 'none');
         }
     });
 

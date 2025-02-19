@@ -55,13 +55,19 @@ class Whoops_Widget {
         // Output the widget HTML
         ?>
         <div class="whoops-widget">
+            <!-- Loading Overlay -->
+            <div class="whoops-loading-overlay">
+                <span class="spinner is-active"></span>
+            </div>
+
             <div class="whoops-tasks">
                 <?php if (empty($tasks)) : ?>
                     <p class="no-tasks">No tasks yet. Add your first task below!</p>
                 <?php else : ?>
                     <ul class="task-list">
                         <?php foreach ($tasks as $task) : ?>
-                            <li class="task-item" data-task-id="<?php echo esc_attr($task->id); ?>">
+                            <li class="task-item <?php echo $task->completed ? 'completed' : ''; ?>" 
+                                data-task-id="<?php echo esc_attr($task->id); ?>">
                                 <label>
                                     <input type="checkbox" 
                                            class="task-checkbox" 
@@ -86,23 +92,26 @@ class Whoops_Widget {
                     <button type="submit">Add</button>
                 </form>
                 
-                <?php if (!empty($tasks)) : ?>
-                    <button class="load-list-button">Load Predefined List</button>
-                    <button class="clear-completed-button">Clear Completed</button>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- Predefined Lists Modal -->
-        <div id="whoops-lists-modal" class="whoops-modal">
-            <div class="whoops-modal-content">
-                <div class="whoops-modal-header">
-                    <h3>Load Predefined List</h3>
-                    <button class="close-modal">&times;</button>
+                <div class="whoops-buttons">
+                    <button class="load-list-button button">Load Predefined List</button>
+                    <?php if (!empty($tasks)) : ?>
+                        <button class="clear-completed-button button">Clear Completed</button>
+                        <button class="clear-all-button button button-link-delete">Clear All</button>
+                    <?php endif; ?>
                 </div>
-                <div class="whoops-modal-body">
-                    <div class="lists-container">
-                        <!-- Lists will be loaded here dynamically -->
+            </div>
+
+            <!-- Predefined Lists Modal -->
+            <div id="whoops-lists-modal" class="whoops-modal">
+                <div class="whoops-modal-content">
+                    <div class="whoops-modal-header">
+                        <h3>Load Predefined List</h3>
+                        <button class="close-modal" aria-label="Close modal">&times;</button>
+                    </div>
+                    <div class="whoops-modal-body">
+                        <div class="lists-container">
+                            <!-- Lists will be loaded here dynamically -->
+                        </div>
                     </div>
                 </div>
             </div>

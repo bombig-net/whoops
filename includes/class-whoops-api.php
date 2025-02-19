@@ -15,8 +15,8 @@ class Whoops_API {
      */
     private $db;
 
-    private $namespace = 'wp/v2';
-    private $rest_base = 'whoops-tasks';
+    private $namespace = 'whoops/v1';
+    private $rest_base = 'tasks';
 
     /**
      * Initialize the class
@@ -39,12 +39,12 @@ class Whoops_API {
      * Register REST API routes
      */
     public function register_routes() {
+        // Tasks endpoints
         register_rest_route($this->namespace, '/' . $this->rest_base, array(
             array(
                 'methods' => WP_REST_Server::READABLE,
                 'callback' => array($this, 'get_tasks'),
                 'permission_callback' => array($this, 'check_admin_permissions'),
-                'schema' => array($this, 'get_item_schema'),
             ),
             array(
                 'methods' => WP_REST_Server::CREATABLE,
@@ -60,6 +60,14 @@ class Whoops_API {
             ),
         ));
 
+        register_rest_route($this->namespace, '/' . $this->rest_base . '/clear-all', array(
+            array(
+                'methods' => WP_REST_Server::DELETABLE,
+                'callback' => array($this, 'clear_all_tasks'),
+                'permission_callback' => array($this, 'check_admin_permissions'),
+            ),
+        ));
+
         register_rest_route($this->namespace, '/' . $this->rest_base . '/(?P<id>[\d]+)', array(
             array(
                 'methods' => WP_REST_Server::READABLE,
@@ -70,15 +78,6 @@ class Whoops_API {
                 'methods' => WP_REST_Server::EDITABLE,
                 'callback' => array($this, 'update_task'),
                 'permission_callback' => array($this, 'check_admin_permissions'),
-                'args' => array(
-                    'completed' => array(
-                        'type' => 'boolean',
-                    ),
-                    'task_description' => array(
-                        'type' => 'string',
-                        'sanitize_callback' => 'sanitize_text_field',
-                    ),
-                ),
             ),
             array(
                 'methods' => WP_REST_Server::DELETABLE,
@@ -91,6 +90,23 @@ class Whoops_API {
             array(
                 'methods' => WP_REST_Server::DELETABLE,
                 'callback' => array($this, 'clear_completed'),
+                'permission_callback' => array($this, 'check_admin_permissions'),
+            ),
+        ));
+
+        // Checklists endpoints
+        register_rest_route($this->namespace, '/checklists', array(
+            array(
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => array($this, 'get_predefined_lists'),
+                'permission_callback' => array($this, 'check_admin_permissions'),
+            ),
+        ));
+
+        register_rest_route($this->namespace, '/checklists/(?P<list_name>[a-z-]+)', array(
+            array(
+                'methods' => WP_REST_Server::READABLE,
+                'callback' => array($this, 'get_specific_list'),
                 'permission_callback' => array($this, 'check_admin_permissions'),
             ),
         ));
@@ -220,6 +236,126 @@ class Whoops_API {
         $deleted = $this->db->delete_completed_tasks();
         if ($deleted === false) {
             return new WP_Error('clear_completed_failed', 'Failed to clear completed tasks', array('status' => 500));
+        }
+        return rest_ensure_response(array('deleted' => true));
+    }
+
+    /**
+     * Get all predefined lists
+     */
+    public function get_predefined_lists($request) {
+        $api_token = Whoops_Settings::get_api_token();
+        
+        if (empty($api_token)) {
+            return new WP_Error('no_api_token', 'API token is not configured', array('status' => 401));
+        }
+
+        $response = wp_remote_get('https://whoopskjvmldv3-whoops-checklists.functions.fnc.fr-par.scw.cloud/', array(
+            'headers' => array(
+                'X-Auth-Token' => $api_token,
+                'Content-Type' => 'application/json'
+            ),
+            'timeout' => 15 // Increase timeout for potentially slow first response
+        ));
+
+        if (is_wp_error($response)) {
+            error_log('Whoops API Error: ' . $response->get_error_message());
+            return new WP_Error(
+                'api_error',
+                'Failed to fetch predefined lists: ' . $response->get_error_message(),
+                array('status' => 500)
+            );
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            $error_message = wp_remote_retrieve_response_message($response);
+            error_log('Whoops API Error: ' . $error_message);
+            return new WP_Error(
+                'api_error',
+                'Failed to fetch predefined lists: ' . $error_message,
+                array('status' => $code)
+            );
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('Whoops API Error: Invalid JSON response');
+            return new WP_Error(
+                'api_error',
+                'Invalid response from checklist service',
+                array('status' => 500)
+            );
+        }
+
+        return rest_ensure_response($data);
+    }
+
+    /**
+     * Get a specific predefined list
+     */
+    public function get_specific_list($request) {
+        $api_token = Whoops_Settings::get_api_token();
+        
+        if (empty($api_token)) {
+            return new WP_Error('no_api_token', 'API token is not configured', array('status' => 401));
+        }
+
+        $list_name = $request['list_name'];
+        $url = add_query_arg('list', $list_name, 'https://whoopskjvmldv3-whoops-checklists.functions.fnc.fr-par.scw.cloud/');
+
+        $response = wp_remote_get($url, array(
+            'headers' => array(
+                'X-Auth-Token' => $api_token,
+                'Content-Type' => 'application/json'
+            ),
+            'timeout' => 15 // Increase timeout for potentially slow first response
+        ));
+
+        if (is_wp_error($response)) {
+            error_log('Whoops API Error: ' . $response->get_error_message());
+            return new WP_Error(
+                'api_error',
+                'Failed to fetch the specified list: ' . $response->get_error_message(),
+                array('status' => 500)
+            );
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        if ($code !== 200) {
+            $error_message = wp_remote_retrieve_response_message($response);
+            error_log('Whoops API Error: ' . $error_message);
+            return new WP_Error(
+                'api_error',
+                'Failed to fetch the specified list: ' . $error_message,
+                array('status' => $code)
+            );
+        }
+
+        $body = wp_remote_retrieve_body($response);
+        $data = json_decode($body, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            error_log('Whoops API Error: Invalid JSON response');
+            return new WP_Error(
+                'api_error',
+                'Invalid response from checklist service',
+                array('status' => 500)
+            );
+        }
+
+        return rest_ensure_response($data);
+    }
+
+    /**
+     * Clear all tasks
+     */
+    public function clear_all_tasks($request) {
+        $deleted = $this->db->delete_all_tasks();
+        if ($deleted === false) {
+            return new WP_Error('clear_all_failed', 'Failed to clear all tasks', array('status' => 500));
         }
         return rest_ensure_response(array('deleted' => true));
     }
