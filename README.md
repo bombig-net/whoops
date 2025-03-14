@@ -1,6 +1,6 @@
 # Whoops – WordPress Dashboard Todo Module
 
-Whoops is a simple WordPress Dashboard module developed by bombig-net exclusively for internal use. It provides a clear and easy-to-use todo list for managing tasks directly within the WordPress Dashboard. Additionally, the module allows downloading predefined tasks for quick integration into new projects.
+Whoops is a simple WordPress Dashboard module developed by [bombig.net](https://bombig.net) exclusively for internal use. It provides a clear and easy-to-use todo list for managing tasks directly within the WordPress Dashboard. Additionally, the module allows downloading predefined tasks for quick integration into new projects.
 
 ## Features
 
