@@ -126,6 +126,9 @@
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    box-sizing: border-box !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
 }
 
 .task-item input[type="checkbox"].task-checkbox:checked {
@@ -223,6 +226,7 @@
     display: flex !important;
     gap: 12px !important;
     margin-top: 20px !important;
+    flex-wrap: wrap;
 }
 
 .whoops-widget .whoops-buttons button {
@@ -239,6 +243,7 @@
     text-decoration: none !important;
     white-space: nowrap !important;
     box-sizing: border-box !important;
+    appearance: none !important;
     -webkit-appearance: none !important;
 }
 
